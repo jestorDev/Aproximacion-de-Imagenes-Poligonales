@@ -25,7 +25,7 @@ NUM_OF_PARAMS = NUM_OF_POLYGONS * (POLYGON_SIZE * 2 + 4)
 POPULATION_SIZE = 200
 P_CROSSOVER = 0.9  # probability for crossover
 P_MUTATION = 0.5   # probability for mutating an individual
-MAX_GENERATIONS = 1000
+MAX_GENERATIONS = 100
 HALL_OF_FAME_SIZE = 20
 CROWDING_FACTOR = 10.0  # crowding factor for crossover and mutation
 
