@@ -12,29 +12,27 @@ from PIL import Image, ImageDraw
 
 import matplotlib.pyplot as plt
 import seaborn as sns
-from deap import algorithms
 
 from operator import attrgetter
 
+import sys
 
+
+SHOW = False
 # problem related constants
-POLYGON_SIZE = 3
-NUM_OF_POLYGONS = 100
+NVERTICESPOL = 3
+NUM_POLIGONOS = 100
 
-# calculate total number of params in chromosome:
-# For each polygon we have:
-# two coordinates per vertex, 3 color values, one alpha value
-NUM_OF_PARAMS = NUM_OF_POLYGONS * (POLYGON_SIZE * 2 + 4)
+# [x1,y1,x2,y2,x3,y3,r,g,b,a]
+#     2     2    2      4
+N_PARAMS = NUM_POLIGONOS * (NVERTICESPOL * 2 + 4)
 
-# Genetic Algorithm constants:
-POPULATION_SIZE = 200
-P_CROSSOVER = 0.9  # probability for crossover
-P_MUTATION = 0.5   # probability for mutating an individual
-MAX_GENERATIONS = 3
-#HALL_OF_FAME_SIZE = 20
-#CROWDING_FACTOR = 10.0  # crowding factor for crossover and mutation
+params = sys.argv[1].split(",")
+POP_SIZE = int(params[0])
+P_CRUZA = float(params[1])
+P_MUTACION = float(params[2])
+MAX_GENS = 3
 
-# set the random seed:
 RANDOM_SEED = 42
 random.seed(RANDOM_SEED)
 
@@ -50,7 +48,7 @@ class ImageTest:
 
     def poligonoAImagen(self, poligonos):
         """
-        Toma una lista de poligonos  de la forma [x1,y1,x1,y1,x1,y1,r,g,b,a]
+        Toma una lista de poligonos  de la forma  [x1,y1,x2,y2,x3,y3,r,g,b,a]
         y renderiza una imagen
         """
 
@@ -59,20 +57,20 @@ class ImageTest:
 
         lenPoligono = self.nVertices * 2 + 4  # (x,y) * numVertices + (RGBA)
         
-        polygons = [ poligonos[chunk:chunk + lenPoligono] for chunk in range(0, len(poligonos), lenPoligono)  ]
+        polygons = [ poligonos[idxPol:idxPol + lenPoligono] for idxPol in range(0, len(poligonos), lenPoligono)  ]
         
         for poly in polygons:
             # vertices del poligono actual
             vertices = []
-            index = 0
+            idx = 0
             for _ in range(self.nVertices):
-                vertices.append((int(poly[index] * self.width), int(poly[index + 1] * self.height)))
-                index += 2
+                vertices.append((int(poly[idx] * self.width), int(poly[idx + 1] * self.height)))
+                idx += 2
 
-            red = int(poly[index] * 255)
-            green = int(poly[index + 1] * 255)
-            blue = int(poly[index + 2] * 255)
-            alpha = int(poly[index + 3] * 255)
+            red = int(poly[idx] * 255)
+            green = int(poly[idx + 1] * 255)
+            blue = int(poly[idx + 2] * 255)
+            alpha = int(poly[idx + 3] * 255)
 
             # renderizar un poligono
             imgDraw.polygon(vertices, (red, green, blue, alpha))
@@ -140,9 +138,9 @@ class ImageTest:
 
 
 
-imageTest = ImageTest("images/logodna50.png", POLYGON_SIZE)
+imageTest = ImageTest("images/logodna50.png", NVERTICESPOL)
 
-NUM_OF_PARAMS = NUM_OF_POLYGONS * (POLYGON_SIZE * 2 + 4)
+N_PARAMS = NUM_POLIGONOS * (NVERTICESPOL * 2 + 4)
 
 MINV, MAXV = 0.0, 1.0  
 
@@ -157,8 +155,8 @@ creator.create("Individual", list, fitness=creator.FitnessMin)
 
 def randomFloat(low, up):
     # Genera un poligono random de la forma 
-    # Toma una lista de poligonos  de la forma [x1,y1,x1,y1,x1,y1,r,g,b,a]
-    return [random.uniform(l, u) for l, u in zip([low] * NUM_OF_PARAMS, [up] * NUM_OF_PARAMS)]
+    # Toma una lista de poligonos  de la forma [x1,y1,x2,y2,x3,y3,r,g,b,a]
+    return [random.uniform(l, u) for l, u in zip([low] * N_PARAMS, [up] * N_PARAMS)]
 
 
 #randomFloat se usara para crear los individuos
@@ -169,7 +167,7 @@ toolbox.register("individualCreator",
                  creator.Individual,
                  toolbox.attrFloat)
 
-toolbox.register("populationCreator",
+toolbox.register("poblacionCreator",
                  tools.initRepeat,
                  list,
                  toolbox.individualCreator)
@@ -246,7 +244,7 @@ toolbox.register("mutate",
                  mutUniforme,
                  low=MINV,
                  up=MAXV,
-                 indpb=1.0/NUM_OF_PARAMS)
+                 indpb=1.0/N_PARAMS)
 
 
 def guardar(gen, poligonos):
@@ -254,7 +252,7 @@ def guardar(gen, poligonos):
     # cada 100 gens
     if gen % 100 == 0:
 
-        folder = "images/resultado/exp-{}-{}".format(POLYGON_SIZE, NUM_OF_POLYGONS)
+        folder = "images/resultado/exp-{}-{}".format(NVERTICESPOL, NUM_POLIGONOS)
         if not os.path.exists(folder):
             os.makedirs(folder)
 
@@ -262,11 +260,83 @@ def guardar(gen, poligonos):
                             "{}/aftercx1p-{}-gen.png".format(folder, gen),
                             "After {} Generations".format(gen))
 
+
+
+
+
+def cruzarMutar(poblacion, toolbox, cxpb, mutpb):
+    offspring = [toolbox.clone(ind) for ind in poblacion]
+
+    # Apply crossover and mutation on the offspring
+    for i in range(1, len(offspring), 2):
+        if random.random() < cxpb:
+            offspring[i - 1], offspring[i] = toolbox.mate(offspring[i - 1],
+                                                          offspring[i])
+            del offspring[i - 1].fitness.values, offspring[i].fitness.values
+
+    for i in range(len(offspring)):
+        if random.random() < mutpb:
+            offspring[i], = toolbox.mutate(offspring[i])
+            del offspring[i].fitness.values
+
+    return offspring
+
+
+def algoGenetico(poblacion, toolbox, cxpb, mutpb, ngen, stats=None,
+             halloffame=None, verbose=__debug__):
+    logbook = tools.Logbook()
+    logbook.header = ['gen', 'nevals'] + (stats.fields if stats else [])
+
+    # Evaluate the individuals with an invalid fitness
+    invalid_ind = [ind for ind in poblacion if not ind.fitness.valid]
+    fitnesses = toolbox.map(toolbox.evaluate, invalid_ind)
+    for ind, fit in zip(invalid_ind, fitnesses):
+        ind.fitness.values = fit
+
+    if halloffame is not None:
+        halloffame.update(poblacion)
+
+    record = stats.compile(poblacion) if stats else {}
+    logbook.record(gen=0, nevals=len(invalid_ind), **record)
+    if verbose:
+        print(logbook.stream)
+
+    # Begin the generational process
+    for gen in range(1, ngen + 1):
+        # Select the next generation individuals
+        offspring = toolbox.select(poblacion, len(poblacion))
+
+        # Vary the pool of individuals
+        offspring = cruzarMutar(offspring, toolbox, cxpb, mutpb)
+
+        # Evaluate the individuals with an invalid fitness
+        invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
+        fitnesses = toolbox.map(toolbox.evaluate, invalid_ind)
+        for ind, fit in zip(invalid_ind, fitnesses):
+            ind.fitness.values = fit
+
+        # Update the hall of fame with the generated individuals
+        if halloffame is not None:
+            halloffame.update(offspring)
+
+        # Replace the current poblacion by the offspring
+        poblacion[:] = offspring
+
+        # Append the current generation statistics to the logbook
+        record = stats.compile(poblacion) if stats else {}
+        logbook.record(gen=gen, nevals=len(invalid_ind), **record)
+        if verbose:
+            print(logbook.stream)
+
+    return poblacion, logbook
+
+
+
 # Genetic Algorithm flow:
 def main():
 
-    # create initial population (generation 0):
-    population = toolbox.populationCreator(n=POPULATION_SIZE)
+    # create initial poblacion (generation 0):
+    poblacion = toolbox.poblacionCreator(n=POP_SIZE)
 
     # prepare the statistics object:
     stats = tools.Statistics(lambda ind: ind.fitness.values)
@@ -274,38 +344,45 @@ def main():
     stats.register("avg", np.mean)
 
 
-    population, logbook = algorithms.eaSimple(population, toolbox, cxpb=P_CROSSOVER, mutpb=P_MUTATION, ngen=MAX_GENERATIONS,
+    poblacion, logbook =  algoGenetico(poblacion, toolbox, cxpb=P_CRUZA, mutpb=P_MUTACION, ngen=MAX_GENS,
                                    stats=stats, verbose=True)
 
 
     # print best solution found:
-    best = population[0]
-    print()
-    print("Best Solution = ", best)
-    print("Best Score = ", best.fitness.values[0])
-    print()
-    # draw best image next to reference image:
-    imageTest.mostrarPlot(imageTest.poligonoAImagen(best))
 
-    # extract statistics:
+    print ("Pop Size", " PCruza" ,  " P_MUTACION")
+    print (POP_SIZE , " " , P_CRUZA ," " , P_MUTACION)
+    
+    
     minFitnessValues, meanFitnessValues = logbook.select("min", "avg")
-
     print("Fitness minimo : ")
     print(minFitnessValues)
-    
     print("Fitness promedio : ")
     print(meanFitnessValues)
-    # plot statistics:
-    sns.set_style("whitegrid")
-    plt.figure("Stats:")
-    plt.plot(minFitnessValues, color='red')
-    plt.plot(meanFitnessValues, color='green')
-    plt.xlabel('Generation')
-    plt.ylabel('Min / Average Fitness')
-    plt.title('Min and Average fitness over Generations')
 
-    # show both plots:
-    plt.show()
+    if SHOW :
+        best = poblacion[0]
+        print("Best Solution = ", best)
+        print("Best Score = ", best.fitness.values[0])
+
+
+        # draw best image next to reference image:
+        imageTest.mostrarPlot(imageTest.poligonoAImagen(best))
+
+        # extract statistics:
+
+
+        # plot statistics:
+        sns.set_style("whitegrid")
+        plt.figure("Stats:")
+        plt.plot(minFitnessValues, color='red')
+        plt.plot(meanFitnessValues, color='green')
+        plt.xlabel('Generation')
+        plt.ylabel('Min / Average Fitness')
+        plt.title('Min and Average fitness over Generations')
+
+        # show both plots:
+        plt.show()
 
 if __name__ == "__main__":
     main()
