@@ -1,3 +1,4 @@
+from pickle import FALSE
 from deap import base
 from deap import creator
 from deap import tools
@@ -16,12 +17,15 @@ import seaborn as sns
 from operator import attrgetter
 
 import sys
+import time
 
 
 SHOW = False
+SHOWD = False
+
 # problem related constants
 NVERTICESPOL = 3
-NUM_POLIGONOS = 100
+NUM_POLIGONOS = 60
 
 # [x1,y1,x2,y2,x3,y3,r,g,b,a]
 #     2     2    2      4
@@ -31,12 +35,13 @@ params = sys.argv[1].split(",")
 POP_SIZE = int(params[0])
 P_CRUZA = float(params[1])
 P_MUTACION = float(params[2])
-MAX_GENS = 3
+EXE = float(params[3])
+MAX_GENS = 700
 
-RANDOM_SEED = 42
-random.seed(RANDOM_SEED)
+#RANDOM_SEED = 42
+#random.seed(RANDOM_SEED)
 
-class ImageTest:
+class ImageMatr:
 
     def __init__(self, imagenPath, nVertices):
         self.refImage = Image.open(imagenPath)
@@ -138,7 +143,7 @@ class ImageTest:
 
 
 
-imageTest = ImageTest("images/logodna50.png", NVERTICESPOL)
+imageTest = ImageMatr("images/logodna50.png", NVERTICESPOL)
 
 N_PARAMS = NUM_POLIGONOS * (NVERTICESPOL * 2 + 4)
 
@@ -204,28 +209,46 @@ toolbox.register("select", selccionTorneo , tournsize=2)
 
 
 def crossoverDosPuntos(ind1, ind2):
-    size = min(len(ind1), len(ind2))
+    size = len(ind1)
     cxpoint1 = random.randint(1, size)
     cxpoint2 = random.randint(1, size - 1)
     if cxpoint2 >= cxpoint1:
         cxpoint2 += 1
-    else:  # Swap the two cx points
+    else:  
         cxpoint1, cxpoint2 = cxpoint2, cxpoint1
 
-    ind1[cxpoint1:cxpoint2], ind2[cxpoint1:cxpoint2] \
-        = ind2[cxpoint1:cxpoint2], ind1[cxpoint1:cxpoint2]
+    ind1[cxpoint1:cxpoint2], ind2[cxpoint1:cxpoint2] = ind2[cxpoint1:cxpoint2], ind1[cxpoint1:cxpoint2]
 
     return ind1, ind2
 
+"""
+
+a[ax1,ay1,ax2,ay2,ax3,ay3,r,g,b,a]
+c[cx1,cy1,cx2,cy2,cx3,cy3,r,g,b,a]
+b[bx1,by1,bx2,by2,bx3,by3,r,g,b,a]
+
+d[x1,y1,x2,y2,x3,y3,r,g,b,a]
+e[x1,y1,x2,y2,x3,y3,r,g,b,a]
+f[x1,y1,x2,y2,x3,y3,r,g,b,a]
+
+
+a[x1,y1,x2,y2,x3,y3,r,g,b,a]x
+e[x1,y1,x2,y2,x3,y3,r,g,b,a]
+f[x1,y1,x2,y2,x3,y3,r,g,b,a]
+
+d[x1,y1,x2,y2,x3,y3,r,g,b,a]x
+b[x1,y1,x2,y2,x3,y3,r,g,b,a]
+c[x1,y1,x2,y2,x3,y3,r,g,b,a]
+
+"""
 
 def crossoverUnPunto(ind1, ind2):
-    size = min(len(ind1), len(ind2))
+    size = len(ind1)
     cxpoint = random.randint(1, size - 1)
     ind1[cxpoint:], ind2[cxpoint:] = ind2[cxpoint:], ind1[cxpoint:]
     return ind1, ind2
 
-toolbox.register("mate",
-                 crossoverUnPunto)
+toolbox.register("mate",crossoverUnPunto)
 
                  
 ##########################################################################################
@@ -235,6 +258,8 @@ toolbox.register("mate",
 
 def mutUniforme(individual, low, up, indpb):
     for i in range(len(individual)):
+        #[x1,y1,x2,y2,x3,y3,r,g,b,a]
+        # x3 ,  r
         if random.random() < indpb:
             individual[i] = random.uniform(low, up)
 
@@ -275,15 +300,20 @@ def cruzarMutar(poblacion, toolbox, cxpb, mutpb):
             del offspring[i - 1].fitness.values, offspring[i].fitness.values
 
     for i in range(len(offspring)):
+        #d[x1,y1,x2,y2,x3,y3,r,g,b,a]
+        #e[x1,y1,x2,y2,x3,y3,r,g,b,a]
+        # 
+        #f[x1,y1,x2,y2,x3,y3,r,g,b,a]
+        
         if random.random() < mutpb:
+
             offspring[i], = toolbox.mutate(offspring[i])
             del offspring[i].fitness.values
 
     return offspring
 
 
-def algoGenetico(poblacion, toolbox, cxpb, mutpb, ngen, stats=None,
-             halloffame=None, verbose=__debug__):
+def algoGenetico(poblacion, toolbox, cxpb, mutpb, ngen, stats=None, verbose=False):
     logbook = tools.Logbook()
     logbook.header = ['gen', 'nevals'] + (stats.fields if stats else [])
 
@@ -293,13 +323,11 @@ def algoGenetico(poblacion, toolbox, cxpb, mutpb, ngen, stats=None,
     for ind, fit in zip(invalid_ind, fitnesses):
         ind.fitness.values = fit
 
-    if halloffame is not None:
-        halloffame.update(poblacion)
 
     record = stats.compile(poblacion) if stats else {}
     logbook.record(gen=0, nevals=len(invalid_ind), **record)
     if verbose:
-        print(logbook.stream)
+        print(logbook[0])
 
     # Begin the generational process
     for gen in range(1, ngen + 1):
@@ -312,21 +340,24 @@ def algoGenetico(poblacion, toolbox, cxpb, mutpb, ngen, stats=None,
         # Evaluate the individuals with an invalid fitness
         invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
         fitnesses = toolbox.map(toolbox.evaluate, invalid_ind)
+        
         for ind, fit in zip(invalid_ind, fitnesses):
             ind.fitness.values = fit
+                
 
-        # Update the hall of fame with the generated individuals
-        if halloffame is not None:
-            halloffame.update(offspring)
+
 
         # Replace the current poblacion by the offspring
         poblacion[:] = offspring
+        
+
+        
 
         # Append the current generation statistics to the logbook
         record = stats.compile(poblacion) if stats else {}
         logbook.record(gen=gen, nevals=len(invalid_ind), **record)
-        if verbose:
-            print(logbook.stream)
+        if verbose and  gen % 50 == 0:
+            print(logbook[gen])
 
     return poblacion, logbook
 
@@ -345,25 +376,30 @@ def main():
 
 
     poblacion, logbook =  algoGenetico(poblacion, toolbox, cxpb=P_CRUZA, mutpb=P_MUTACION, ngen=MAX_GENS,
-                                   stats=stats, verbose=True)
+                                   stats=stats, verbose=SHOW)
 
 
     # print best solution found:
 
-    print ("Pop Size", " PCruza" ,  " P_MUTACION")
-    print (POP_SIZE , " " , P_CRUZA ," " , P_MUTACION)
+
+    filename = "EXP" +str(POP_SIZE) + "_"+ str(P_CRUZA) +"_"+ str(P_MUTACION) + "_" + str(EXE) + ".txt"
+
     
-    
-    minFitnessValues, meanFitnessValues = logbook.select("min", "avg")
-    print("Fitness minimo : ")
-    print(minFitnessValues)
-    print("Fitness promedio : ")
-    print(meanFitnessValues)
+    with open( filename, "w") as file:
+        file.write ("Pop Size PCruza  P_MUTACION\n")
+        file.write ("{} {} {}".format (POP_SIZE ,P_CRUZA, P_MUTACION))
+        minFitnessValues, meanFitnessValues = logbook.select("min", "avg")
+        file.write("\nFitness minimo : \n")
+        file.write( ",".join(map(str,minFitnessValues) ) )
+        file.write("\nFitness promedio : \n")
+        file.write(",".join( map(str,meanFitnessValues)))
+
 
     if SHOW :
-        best = poblacion[0]
-        print("Best Solution = ", best)
-        print("Best Score = ", best.fitness.values[0])
+        if SHOWD:
+            best = poblacion[0]
+            print("Best Solution = ", best)
+            print("Best Score = ", best.fitness.values[0])
 
 
         # draw best image next to reference image:
@@ -384,5 +420,10 @@ def main():
         # show both plots:
         plt.show()
 
+
+
 if __name__ == "__main__":
+    start_time = time.time()
     main()
+    print("--- %s seconds ---" % (time.time() - start_time))
+    
